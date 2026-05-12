@@ -29,6 +29,7 @@ EndScriptData */
 #include "CellImpl.h"
 #include "Channel.h"
 #include "Chat.h"
+#include "ChatPackets.h"
 #include "GameTime.h"
 #include "GossipDef.h"
 #include "GridNotifiersImpl.h"
@@ -37,6 +38,7 @@ EndScriptData */
 #include "Log.h"
 #include "M2Stores.h"
 #include "MapManager.h"
+#include "MovementPackets.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "PoolMgr.h"
@@ -491,9 +493,9 @@ public:
 
     static bool HandleDebugSendChatMsgCommand(ChatHandler* handler, ChatMsg type)
     {
-        WorldPacket data;
-        ChatHandler::BuildChatPacket(data, type, LANG_UNIVERSAL, handler->GetPlayer(), handler->GetPlayer(), "testtest", 0, "chan");
-        handler->GetSession()->SendPacket(&data);
+        WorldPackets::Chat::Chat packet;
+        packet.Initialize(type, LANG_UNIVERSAL, handler->GetPlayer(), handler->GetPlayer(), "testtest", 0, "chan");
+        handler->GetSession()->SendPacket(packet.Write());
         return true;
     }
 
@@ -1331,7 +1333,11 @@ public:
             if (target->GetTypeId() != TYPEID_PLAYER)
                 target->DestroyForNearbyPlayers();  // Force new SMSG_UPDATE_OBJECT:CreateObject
             else
-                target->SendMovementFlagUpdate();
+            {
+                WorldPackets::Movement::MoveUpdate moveUpdate;
+                moveUpdate.Status = &target->m_movementInfo;
+                target->SendMessageToSet(moveUpdate.Write(), true);
+            }
 
             handler->PSendSysMessage(LANG_MOVEFLAGS_SET, target->GetUnitMovementFlags(), target->GetExtraUnitMovementFlags());
         }

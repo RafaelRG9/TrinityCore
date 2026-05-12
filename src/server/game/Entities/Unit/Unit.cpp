@@ -24,7 +24,6 @@
 #include "BattlegroundScore.h"
 #include "CellImpl.h"
 #include "CharacterCache.h"
-#include "Chat.h"
 #include "ChatPackets.h"
 #include "ChatTextBuilder.h"
 #include "CombatPackets.h"
@@ -10309,19 +10308,19 @@ MovementGeneratorType Unit::GetDefaultMovementType() const
     return IDLE_MOTION_TYPE;
 }
 
-void Unit::StopMoving()
+void Unit::StopMoving(bool force /*= false*/)
 {
     ClearUnitState(UNIT_STATE_MOVING);
 
     // not need send any packets if not in world or not moving
-    if (!IsInWorld() || movespline->Finalized())
+    if (!IsInWorld() || (!force && movespline->Finalized()))
         return;
 
     // Update position now since Stop does not start a new movement that can be updated later
     if (movespline->HasStarted())
         UpdateSplinePosition();
     Movement::MoveSplineInit init(this);
-    init.Stop();
+    init.Stop(force);
 }
 
 void Unit::PauseMovement(uint32 timer/* = 0*/, uint8 slot/* = 0*/, bool forced/* = true*/)
@@ -10343,13 +10342,6 @@ void Unit::ResumeMovement(uint32 timer/* = 0*/, uint8 slot/* = 0*/)
 
     if (MovementGenerator* movementGenerator = GetMotionMaster()->GetCurrentMovementGenerator(MovementSlot(slot)))
         movementGenerator->Resume(timer);
-}
-
-void Unit::SendMovementFlagUpdate(bool self /* = false */)
-{
-    WorldPacket data;
-    BuildHeartBeatMsg(&data);
-    SendMessageToSet(&data, self);
 }
 
 bool Unit::IsSitState() const
@@ -11701,6 +11693,14 @@ void Unit::RemoveCharmedBy(Unit* charmer)
     else
         RestoreFaction();
 
+    if (type != CHARM_TYPE_CHARM && !IsPlayer())
+    {
+        StopMoving(true);
+
+        // Purge flags left over by client control
+        m_movementInfo.RemoveMovementFlag(MOVEMENTFLAG_MASK_MOVING | MOVEMENTFLAG_MASK_TURNING);
+    }
+
     ///@todo Handle SLOT_IDLE motion resume
     GetMotionMaster()->InitializeDefault();
 
@@ -12845,13 +12845,6 @@ void Unit::NearTeleportTo(Position const& pos, bool casting /*= false*/)
     }
 }
 
-void Unit::BuildHeartBeatMsg(WorldPacket* data) const
-{
-    data->Initialize(MSG_MOVE_HEARTBEAT, 32);
-    *data << GetPackGUID();
-    BuildMovementPacket(data);
-}
-
 void Unit::SendTeleportPacket(Position const& pos, bool teleportingTransport /*= false*/)
 {
     // MSG_MOVE_TELEPORT is sent to nearby players to signal the teleport
@@ -13858,9 +13851,9 @@ void Unit::Whisper(std::string_view text, Language language, Player* target, boo
         return;
 
     LocaleConstant locale = target->GetSession()->GetSessionDbLocaleIndex();
-    WorldPacket data;
-    ChatHandler::BuildChatPacket(data, isBossWhisper ? CHAT_MSG_RAID_BOSS_WHISPER : CHAT_MSG_MONSTER_WHISPER, language, this, target, text, 0, "", locale);
-    target->SendDirectMessage(&data);
+    WorldPackets::Chat::Chat packet;
+    packet.Initialize(isBossWhisper ? CHAT_MSG_RAID_BOSS_WHISPER : CHAT_MSG_MONSTER_WHISPER, language, this, target, text, 0, "", locale);
+    target->SendDirectMessage(packet.Write());
 }
 
 uint32 Unit::GetVirtualItemId(uint32 slot) const
@@ -13921,9 +13914,9 @@ void Unit::Whisper(uint32 textId, Player* target, bool isBossWhisper /*= false*/
     }
 
     LocaleConstant locale = target->GetSession()->GetSessionDbLocaleIndex();
-    WorldPacket data;
-    ChatHandler::BuildChatPacket(data, isBossWhisper ? CHAT_MSG_RAID_BOSS_WHISPER : CHAT_MSG_MONSTER_WHISPER, LANG_UNIVERSAL, this, target, bct->GetText(locale, GetGender()), 0, "", locale);
-    target->SendDirectMessage(&data);
+    WorldPackets::Chat::Chat packet;
+    packet.Initialize(isBossWhisper ? CHAT_MSG_RAID_BOSS_WHISPER : CHAT_MSG_MONSTER_WHISPER, LANG_UNIVERSAL, this, target, bct->GetText(locale, GetGender()), 0, "", locale);
+    target->SendDirectMessage(packet.Write());
 }
 
 // Returns collisionheight of the unit. If it is 0, it returns DEFAULT_COLLISION_HEIGHT.

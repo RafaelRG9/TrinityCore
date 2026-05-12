@@ -144,8 +144,15 @@ namespace WorldPackets
         class PlayedTimeClient;
     }
 
+    namespace ClientConfig
+    {
+        class RequestAccountData;
+        class UserClientUpdateAccountData;
+    }
+
     namespace Chat
     {
+        class ChatMessage;
         class EmoteClient;
     }
 
@@ -219,16 +226,24 @@ namespace WorldPackets
 
     namespace Misc
     {
+        class TimeSyncResponse;
+        class ReclaimCorpse;
+        class RepopRequest;
+        class ResurrectResponse;
+        class UITimeRequest;
+        class RandomRollClient;
         class CompleteCinematic;
         class CompleteMovie;
         class NextCinematicCamera;
         class OpeningCinematic;
-        class RandomRollClient;
         class TogglePvP;
         class WorldTeleport;
-        class ReclaimCorpse;
-        class RepopRequest;
-        class ResurrectResponse;
+    }
+
+    namespace Movement
+    {
+        class ClientPlayerMovement;
+        class WorldPortResponse;
     }
 
     namespace NPC
@@ -255,6 +270,7 @@ namespace WorldPackets
     {
         class QueryCreature;
         class QueryPlayerName;
+        class QueryPageText;
         class QueryGameObject;
         class QueryCorpseLocationFromClient;
         class QueryCorpseTransport;
@@ -315,9 +331,7 @@ uint32 constexpr MAX_CHARACTERS_PER_REALM = 10; // max supported by client in ch
 
 struct AccountData
 {
-    AccountData() : Time(0), Data("") { }
-
-    time_t Time;
+    time_t Time = 0;
     std::string Data;
 };
 
@@ -551,7 +565,7 @@ class TC_GAME_API WorldSession
         bool CheckStableMaster(ObjectGuid guid);
 
         // Account Data
-        AccountData* GetAccountData(AccountDataType type) { return &m_accountData[type]; }
+        AccountData const* GetAccountData(AccountDataType type) const { return &m_accountData[type]; }
         void SetAccountData(AccountDataType type, time_t tm, std::string const& data);
         void SendAccountDataTimes(uint32 mask);
         void LoadAccountData(PreparedQueryResult result, uint32 mask);
@@ -754,8 +768,8 @@ class TC_GAME_API WorldSession
         void HandleSetWatchedFactionOpcode(WorldPacket& recvData);
         void HandleSetFactionInactiveOpcode(WorldPacket& recvData);
 
-        void HandleUpdateAccountData(WorldPacket& recvPacket);
-        void HandleRequestAccountData(WorldPacket& recvPacket);
+        void HandleUpdateAccountData(WorldPackets::ClientConfig::UserClientUpdateAccountData& packet);
+        void HandleRequestAccountData(WorldPackets::ClientConfig::RequestAccountData& request);
         void HandleSetActionButtonOpcode(WorldPacket& recvPacket);
 
         void HandleGameObjectUseOpcode(WorldPacket& recPacket);
@@ -769,10 +783,14 @@ class TC_GAME_API WorldSession
 
         void HandleGameObjectQueryOpcode(WorldPackets::Query::QueryGameObject& query);
 
-        void HandleMoveWorldportAckOpcode(WorldPacket& recvPacket);
+        void HandleMoveWorldportAckOpcode(WorldPackets::Movement::WorldPortResponse& packet);
         void HandleMoveWorldportAck();                // for server-side calls
 
-        void HandleMovementOpcodes(WorldPacket& recvPacket);
+        // Validates that correct unit is moved, coords are in valid range and movement flags
+        bool ValidateMovementInfo(Unit const* mover, MovementInfo* mi) const;
+
+        void HandleMovementOpcodes(WorldPackets::Movement::ClientPlayerMovement& packet);
+        void HandleMovementOpcode(OpcodeClient opcode, MovementInfo& movementInfo);
         void HandleSetActiveMoverOpcode(WorldPacket& recvData);
         void HandleMoveNotActiveMover(WorldPacket& recvData);
         void HandleDismissControlledVehicle(WorldPacket& recvData);
@@ -950,7 +968,8 @@ class TC_GAME_API WorldSession
         void HandlePushQuestToParty(WorldPacket& recvPacket);
         void HandleQuestPushResult(WorldPacket& recvPacket);
 
-        void HandleMessagechatOpcode(WorldPacket& recvPacket);
+        void HandleChatMessageOpcode(WorldPackets::Chat::ChatMessage& chatMessage);
+        void HandleChatMessage(ChatMsg type, Language lang, std::string msg, std::string target);
         void SendPlayerNotFoundNotice(std::string const& name);
         void SendPlayerAmbiguousNotice(std::string const& name);
         void SendWrongFactionNotice();
@@ -988,7 +1007,7 @@ class TC_GAME_API WorldSession
         void HandleNextCinematicCamera(WorldPackets::Misc::NextCinematicCamera& packet);
         void HandleCompleteMovie(WorldPackets::Misc::CompleteMovie& packet);
 
-        void HandleQueryPageText(WorldPacket& recvPacket);
+        void HandleQueryPageText(WorldPackets::Query::QueryPageText& packet);
 
         void HandleTutorialFlag (WorldPacket& recvData);
         void HandleTutorialClear(WorldPacket& recvData);
@@ -1047,7 +1066,7 @@ class TC_GAME_API WorldSession
         void HandleSetRaidDifficultyOpcode(WorldPacket& recvData);
         void HandleSetTitleOpcode(WorldPacket& recvData);
         void HandleRealmSplitOpcode(WorldPacket& recvData);
-        void HandleTimeSyncResponse(WorldPacket& recvData);
+        void HandleTimeSyncResponse(WorldPackets::Misc::TimeSyncResponse& packet);
         void HandleWhoIsOpcode(WorldPacket& recvData);
         void HandleResetInstancesOpcode(WorldPacket& recvData);
         void HandleInstanceLockResponse(WorldPacket& recvPacket);
@@ -1160,7 +1179,7 @@ class TC_GAME_API WorldSession
         void HandleEquipmentSetSave(WorldPacket& recvData);
         void HandleEquipmentSetDelete(WorldPacket& recvData);
         void HandleEquipmentSetUse(WorldPacket& recvData);
-        void HandleWorldStateUITimerUpdate(WorldPacket& recvData);
+        void HandleWorldStateUITimerUpdate(WorldPackets::Misc::UITimeRequest& recvData);
         void HandleReadyForAccountDataTimes(WorldPacket& recvData);
         void HandleQueryQuestsCompleted(WorldPacket& recvData);
         void HandleQuestPOIQuery(WorldPackets::Query::QuestPOIQuery& query);
@@ -1228,7 +1247,7 @@ class TC_GAME_API WorldSession
         }
 
         // Movement helpers
-        bool IsRightUnitBeingMoved(ObjectGuid guid);
+        Unit* ValidateAndGetUnitBeingMoved(ObjectGuid guid, bool forStatusAck) const;
 
         // this stores the GUIDs of the characters who can login
         // characters who failed on Player::BuildEnumData shouldn't login
