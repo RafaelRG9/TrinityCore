@@ -39,9 +39,8 @@ public:
         continue;
 
       // Fetch the level requirement for this spell from game data
-      auto levelInfo = sSpellMgr->GetSpellLevelInfo(entry->Spell);
-      if (!levelInfo || levelInfo->BaseLevel > level)
-        continue;
+     if (spellInfo->SpellLevel > level)
+         continue;
 
       // Grant the spell if the character doesn't already have it
       if (!player->HasSpell(entry->Spell)) {
